@@ -1,7 +1,5 @@
 import itertools
-# https://www.codingame.com/training/hard/a-man-with-a-plan
-# Auto-generated code below aims at helping you parse
-# the standard input according to the problem statement.
+from functools import total_ordering
 
 #  grassland 2 days
 #  water 2 days
@@ -23,7 +21,6 @@ def wizardly_distance(a, b):
 # dungeon: princess
 
 # Each piece of land is directly connected to its eight neighbors.
-import itertools
 def adj(a, b, w, h):
     adj_to_consider = itertools.product([a-1, a, a+1], [b-1, b, b+1])
     return (
@@ -53,7 +50,9 @@ poi_traits = {
     'TREASURE': {'peasant': 4, 'knight': 2, 'mounted': 4, 'mounted_knight': 2, 'visited':1},
     'BLACKSMITH': {'peasant': 1, 'knight': 1, 'mounted': 1, 'mounted_knight': 1},
     'STABLE': {'peasant': 1, 'knight': 1, 'mounted': 1, 'mounted_knight': 1},
-    'STABLE': {'peasant': 1, 'knight': 1, 'mounted': 1, 'mounted_knight': 1},
+    'CASTLE': {'peasant': 1, 'knight': 1, 'mounted': 1, 'mounted_knight': 1},
+    'HOUSE': {'peasant': 1, 'knight': 1, 'mounted': 1, 'mounted_knight': 1},
+    'WIZARD': {'peasant': 1, 'knight': 1, 'mounted': 1, 'mounted_knight': 1},
 }
 
 wizards = {}
@@ -67,8 +66,8 @@ pois = {}
 for y_coord in range(height):
     for x_coord, land_type in enumerate(input()):
         if land_type == 'I':
-            wizard_targets.append(x_coord, y_coord)
-        kingdom[(x_coord,y_coord)] = land_type, False
+            wizard_targets.append((x_coord, y_coord))
+        kingdom[(x_coord,y_coord)] = land_type
 
 for _poi in range(n):
     poi, x, y = input().split()
@@ -77,13 +76,13 @@ for _poi in range(n):
     pois[(x,y)] = poi
 
     if poi == "HOUSE":
-        start = (x, y)
+        START = (x, y)
     
     if poi == objective:
-        objective = (x, y)
+        OBJECTIVE = (x, y)
 
     if poi == "CASTLE":
-        castle = (x, y)
+        CASTLE = (x, y)
 
     if poi == "WIZARD":
         wiz = (x, y)
@@ -95,25 +94,108 @@ for _poi in range(n):
 
 
 # Search for shortest path 
-
-class journey():
-    adjacent: list
+@total_ordering
+class Journey():
     visited: list
     character_state: str #peasant, knight, 
     objective_achieved: bool
-    journey_length: str
+    journey_length: int
+    pos: tuple
 
     def __init__(self, start):
-        self.journey_length = 1 #good bye mum xoxo
+        self.journey_length = 0 #good bye mum xoxo (not 1 because castle)
         self.character_state = "peasant"
         self.objective_achieved = False
         self.visited = [start]
-        self.adjacent = adj(*start, width, height) 
+        self.history = {(start, self.character_state, self.objective_achieved)}
+        self.pos = start
 
+    def priority(self):
+        #basic heuristic to start with 
+        dist_to_obj = wizardly_distance(self.pos, OBJECTIVE) if not self.objective_achieved else 0
+        dist_to_castle = wizardly_distance(self.pos, CASTLE if self.objective_achieved else OBJECTIVE)
 
+        return dist_to_obj + dist_to_castle
 
+    def make_new_move(self, days, next_step):
+        self.journey_length += days
+        self.visited.append(next_step)
+        self.pos = next_step
+        if self.pos == OBJECTIVE:
+            self.objective_achieved = True
 
+        event = (self.pos, self.character_state, self.objective_achieved)
+        if event in self.history:
+            return False
+        self.history.add(event)
+        return True
 
+    def get_horse(self):
+        if self.character_state == "mounted": 
+            return
+        else:
+            self.character_state = "mounted" if self.character_state == "peasant" else "mounted_knight"
 
+    def get_sword(self):
+        if self.character_state == "knight":
+            return
+        else:
+            self.character_state = "knight" if self.character_state == "peasant" else "mounted_knight"
 
+    def quest_complete(self):
+        return self.objective_achieved and self.pos == CASTLE
 
+    def __lt__(self, other):
+        return self.priority() < other.priority()
+        
+    def __eq__(self, other):
+          
+        # Changing the functionality
+        # of equality operator
+        return self.priority() != other.priority()
+          
+
+from queue import PriorityQueue
+from copy import deepcopy
+q = PriorityQueue()
+
+q.put(Journey(START))
+
+shortest = None
+while not q.empty():
+    journey = q.get()
+
+    if journey.quest_complete():
+        shortest = shortest or journey.journey_length
+        shortest = min(shortest, journey.journey_length)
+        
+    if shortest and journey.journey_length >= shortest:
+        continue
+
+    for next_step in adj(*journey.pos, width, height):
+        terrain = kingdom[next_step]
+        if not map_traits.get(terrain, True):
+            #IMA SCARED OF HEIGHTS
+            continue
+
+        next_j = deepcopy(journey)
+        if terrain == "I":
+            poi = pois[next_step]
+            if next_step in next_j.visited:
+                days = poi_traits[poi].get('visited') or poi_traits[poi][next_j.character_state]
+            else:
+                days = poi_traits[poi][next_j.character_state]
+            if poi == 'WIZARD':
+                next_step = wizards[wiz]['closest_poi']
+            if poi == 'STABLE':
+                next_j.get_horse()
+            if poi == 'BLACKSMITH':
+                next_j.get_sword()
+        else:
+            #print((terrain, next_j.character_state), file=sys.stderr, flush=True)
+            days = map_traits[terrain][next_j.character_state] 
+        
+        if next_j.make_new_move(days, next_step):
+            q.put(next_j)
+
+print(shortest)
