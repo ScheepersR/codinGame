@@ -168,15 +168,14 @@ while not q.empty():
     if journey.quest_complete():
         shortest = shortest or journey.journey_length
         shortest = min(shortest, journey.journey_length)
+        print(shortest)
+        break
         
     if shortest and journey.journey_length >= shortest:
         continue
 
     for next_step in adj(*journey.pos, width, height):
         terrain = kingdom[next_step]
-        if not map_traits.get(terrain, True):
-            #IMA SCARED OF HEIGHTS
-            continue
 
         next_j = deepcopy(journey)
         if terrain == "I":
@@ -195,7 +194,9 @@ while not q.empty():
             #print((terrain, next_j.character_state), file=sys.stderr, flush=True)
             days = map_traits[terrain][next_j.character_state] 
         
+        if days is None:
+            #IMA SCARED OF HEIGHTS
+            continue
+
         if next_j.make_new_move(days, next_step):
             q.put(next_j)
-
-print(shortest)
