@@ -1,3 +1,4 @@
+#https://www.codingame.com/ide/puzzle/a-man-with-a-plan
 import itertools
 from functools import total_ordering
 
@@ -14,6 +15,11 @@ from functools import total_ordering
 # wizard, teleports to nearest POI - 1 day recovery, manhatten distance
 def wizardly_distance(a, b):
     return sum(abs(val1-val2) for val1, val2 in zip(a,b))
+
+def walk_distance(a, b):
+    hz = abs(a[0] - b[0])
+    vert = abs(a[1] - b[1])
+    return min(hz, vert) + abs(hz-vert)
 
 # 4days
 # dragon: 
@@ -107,16 +113,19 @@ class Journey():
         self.character_state = "peasant"
         self.objective_achieved = False
         self.visited = [start]
-        self.history = {(start, self.character_state, self.objective_achieved)}
+        self.history = [(start, self.character_state, self.objective_achieved)]
         self.pos = start
 
     def priority(self):
         #basic heuristic to start with 
-        dist_to_obj = wizardly_distance(self.pos, OBJECTIVE) if not self.objective_achieved else 0
-        dist_to_castle = wizardly_distance(self.pos, CASTLE if self.objective_achieved else OBJECTIVE)
+        dist_to_obj = walk_distance(self.pos, OBJECTIVE) if not self.objective_achieved else 0
+        dist_to_castle = walk_distance(self.pos, CASTLE if self.objective_achieved else OBJECTIVE)
 
-        return dist_to_obj + dist_to_castle
+        return 3*(dist_to_obj + dist_to_castle) + self.journey_length - map_traits['S'][self.character_state]
 
+    def event(self):
+        return (self.pos, self.character_state, self.objective_achieved)
+    
     def make_new_move(self, days, next_step):
         self.journey_length += days
         self.visited.append(next_step)
@@ -124,10 +133,9 @@ class Journey():
         if self.pos == OBJECTIVE:
             self.objective_achieved = True
 
-        event = (self.pos, self.character_state, self.objective_achieved)
-        if event in self.history:
+        if self.event() in self.history:
             return False
-        self.history.add(event)
+        self.history.append(self.event())
         return True
 
     def get_horse(self):
@@ -162,37 +170,51 @@ q = PriorityQueue()
 q.put(Journey(START))
 
 shortest = None
+
+def get_days(terrain, current_state):
+    if terrain == "I":
+        poi = pois[next_step]
+        if next_step in next_j.visited:
+            days = poi_traits[poi].get('visited') or poi_traits[poi][current_state]
+        else:
+            days = poi_traits[poi][current_state]
+    else:
+        days = map_traits[terrain][current_state] 
+
+    return days
+
+events = {}
 while not q.empty():
     journey = q.get()
 
     if journey.quest_complete():
         shortest = shortest or journey.journey_length
         shortest = min(shortest, journey.journey_length)
-        print(shortest)
-        break
-        
+
     if shortest and journey.journey_length >= shortest:
         continue
+
+    if journey.event() in events:
+        if events[journey.event()] <= journey.journey_length:
+            continue
+
+    events[journey.event()] = journey.journey_length
 
     for next_step in adj(*journey.pos, width, height):
         terrain = kingdom[next_step]
 
         next_j = deepcopy(journey)
+        days = get_days(terrain, next_j.character_state)
         if terrain == "I":
             poi = pois[next_step]
-            if next_step in next_j.visited:
-                days = poi_traits[poi].get('visited') or poi_traits[poi][next_j.character_state]
-            else:
-                days = poi_traits[poi][next_j.character_state]
             if poi == 'WIZARD':
                 next_step = wizards[wiz]['closest_poi']
+                tp_terrain = kingdom[next_step]
+                days += get_days(tp_terrain, next_j.character_state)
             if poi == 'STABLE':
                 next_j.get_horse()
             if poi == 'BLACKSMITH':
                 next_j.get_sword()
-        else:
-            #print((terrain, next_j.character_state), file=sys.stderr, flush=True)
-            days = map_traits[terrain][next_j.character_state] 
         
         if days is None:
             #IMA SCARED OF HEIGHTS
@@ -200,3 +222,5 @@ while not q.empty():
 
         if next_j.make_new_move(days, next_step):
             q.put(next_j)
+
+print(shortest)
